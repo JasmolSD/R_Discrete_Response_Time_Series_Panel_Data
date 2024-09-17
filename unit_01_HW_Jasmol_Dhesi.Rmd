@@ -1,0 +1,418 @@
+---
+title : 'W271 Assignment 1'
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+```
+
+**Instructions**
+
+Here are some resources that may come in handy as you work on this assignment:
+
+-   Access the most updated version of the assignment on the course's [GitHub organization](http://github.com/mids-w271).
+-   Complete your assignments using [iSchool DataHub](http://ischool.datahub.berkeley.edu/).
+-   Submit your assignment to [Gradescope](https://www.gradescope.com/).
+
+# Maximum Likelihood (30 Points)
+
+Suppose we have a random sample of n observations, $X_1, X_2, ..., X_n$, drawn from a distribution with probability density function
+
+$$f(x, \theta) = \frac{1}{\theta} e^{-\frac{x}{\theta}}$$ Where: $$x> 0, \theta > 0$$
+
+## Log-likelihood function (6 points)
+
+Write the log-likelihood function $Log(L(\theta|Data))$.
+
+$$
+\begin{aligned}
+&f(x, \theta) = \frac{1}{\theta} e^{-\frac{x}{\theta}} \\
+&\ell(x, \theta) = \ln(f(x, \theta)) \\
+&\ell(x, \theta) = \ln\left(\frac{1}{\theta} e^{-\frac{x}{\theta}}\right) \\
+&\ell(x, \theta) = \ln\left(\frac{1}{\theta}\right) + \ln\left(e^{-\frac{x}{\theta}}\right) \\
+&\ell(x, \theta) = \ln\left(\frac{1}{\theta}\right) - \frac{x}{\theta} \\
+&\ell(x, \theta) = -\ln(\theta) - \frac{x}{\theta} \\
+&\textit{The log-likelihood function for the pdf provided:}\\
+&\ell(x, \theta) = -\ln(\theta) - \frac{x}{\theta}
+\end{aligned}
+$$
+
+## Maximum likelihood estimator (6 points)
+
+Derive the maximum likelihood estimator of $\theta$, denoted as $\hat{\theta}$,
+
+$$
+\text{Step 1: Take the derivative of the log of the likelihood function with respect to } \theta \left( \frac{\partial}{\partial \theta} \right) \\
+$$
+
+$$
+\begin{aligned}
+&\frac{\partial \ell(x, \theta)}{\partial \theta} = \frac{\partial}{\partial \theta} \left(-\ln(\theta) - \frac{x}{\theta}\right) \\
+&\frac{\partial \ell(x, \theta)}{\partial \theta} = \frac{\partial}{\partial \theta} \left(-\ln(\theta)\right) + \frac{\partial}{\partial \theta} \left(-\frac{x}{\theta}\right) \\
+&\frac{\partial \ell(x, \theta)}{\partial \theta} = -\frac{1}{\theta} + \frac{x}{\theta^2} \\
+\end{aligned}
+$$
+
+$$
+\text{Step 2: Set the derivative equal to 0 and solve for } \hat{\theta} \\
+$$
+
+$$
+\begin{aligned}
+&0 = -\frac{1}{\hat{\theta}} + \frac{x}{\hat{\theta}^2} \\
+&\frac{1}{\hat{\theta}} = \frac{x}{\hat{\theta}^2} \\
+&\hat{\theta} = x \\
+\end{aligned}
+$$
+
+$$
+\text{The MLE of } \hat{\theta} \text{ is: } \hat{\theta} = x
+$$
+
+## Bias of the maximum likelihood estimator (6 points)
+
+Show that the maximum likelihood estimator $\hat{\theta}$ is unbiased.
+
+-   **Note:** $f(x)$ is an exponential distribution with $E[X] = \theta$ and $Var[X] = \theta^{2}$.
+
+$$
+\begin{aligned}
+&\text{An estimator } \hat{\theta} \text{ is unbiased if: } \mathbb{E}[\hat{\theta}] = \theta \\
+&\text{Here, } \hat{\theta} = x \text{ and thus } \mathbb{E}[\hat{\theta}] = \mathbb{E}[x] \\
+&\text{Since } x \text{ follows an exponential distribution with } \mathbb{E}[x] = \theta, \text{ we have:} \\
+&\mathbb{E}[\hat{\theta}] = \mathbb{E}[x] = \theta
+\end{aligned}
+$$
+
+## Mean squared error of the maximum likelihood estimator (6 points)
+
+Prove that $MSE(\hat{\theta}) = \frac{\theta^2}{n}$.
+
+$$
+\begin{aligned}
+&MSE(\hat{\theta}) = \mathbb{E}[(\hat{\theta}-\theta)^2] \\
+&MSE(\hat{\theta}) = Var(\hat{\theta}) + Bias(\hat{\theta},\theta) \\
+&\text{Since unbiased:} \\
+&MSE(\hat{\theta}) = Var(\hat{\theta}) \\
+&MSE(\hat{\theta}) = \frac{1}{n^2} \sum_{i=1}^n Var(x_i) = \frac{1}{n^2} * n * Var(x) \\
+&MSE(\hat{\theta}) = \frac{1}{n} * \theta^2 \\
+&MSE(\hat{\theta}) = \frac{1}{n} * \theta^2 \\ 
+&\text{The MSE of the MLE:}\\
+&MSE(\hat{\theta}) = \frac{\theta^2}{n}
+\end{aligned}
+$$
+
+## A sample estimate (6 points)
+
+Using the provided set of observations below, compute a sample estimate of $\hat{\theta}$ and then use it to calculate the probability $P[X > 5]$.
+
+$$x_1 = 2, x_2 = 0.5, x_3= 1.5, x_4= 3, x_5 = 0.5$$
+
+Computing a sample estimate of $\hat{\theta}$. $$
+\begin{aligned}
+&\text{1. Sample Estimate of} \ \hat{\theta} \ \text{from observations:}\\
+&\hat{\theta} = \frac{1}{n} \sum_{i=1}^n x_i\\
+&\hat{\theta} = \frac{1}{5} (2+0.5+1.5+3+0.5)\\
+&\hat{\theta} = 1.5\\
+\end{aligned}
+$$
+
+Calculating the probability $P[X > 5]$.
+
+$$
+\begin{aligned}
+&\text{2. P[X > 5]}\\
+&\text{For an exponential function:} \\
+&P[X > 5] = e^\frac{-x}{\theta}\\
+&\text{For sample estimator} \ \hat{\theta} = 1.5 \ \text{and x = 5:}\\
+&P[X > 5] = e^\frac{-5}{1.5}\\
+&P[X > 5] = e^{-3.333}\\
+&P[X > 5] = 0.0357
+\end{aligned}
+$$
+
+# Customer churn study: Part-1 (70 points)
+
+Customer churn refers to the rate at which customers discontinue using a company's products or services. It has a significant impact on a company's revenue and growth. High churn rates may indicate customer dissatisfaction or stiff competition. Therefore, it's crucial for businesses to monitor churn and devise strategies to retain customers.
+
+This project consists of three parts. In Part 1, we examine how senior customers differ from non-senior customers in terms of churn
+
+In Part 2 and Part 3 (HW-2, HW-3), we will employ regression techniques to build more complex models and explore further questions about customer churn behavior.
+
+```{r load of the data}
+telcom_churn <- read.csv("Telco_Customer_Churn.csv", header=T,na.strings=c("","NA")) 
+
+```
+
+Churn dataset consists of 21 variables and 7043 observations. You can find variable definitions in the `data_description` file.
+
+For the remainder of this section, pay particular attention to two variables: `Churn` and `SeniorCitizen`.
+
+## Data Preprocessing (5 points)
+
+In this section, review the structure of data to ensure proper data types. Convert variables as needed, and manage any missing values.
+
+```{r Data Preprocessing}
+telcom_churn$churn_bool <- ifelse(telcom_churn$Churn == "Yes", 1, 0)
+
+# Convert SeniorCitizen to a factor
+telcom_churn$SeniorCitizen_fact <- 
+  factor(telcom_churn$SeniorCitizen, levels = c(0, 1), labels = c("No", "Yes"))
+```
+
+## Probablity of customer churn (10 points)
+
+Calculate the probability of a customer churning, denoted as $\hat{\pi}$. Additionally, compute its confidence interval and interpret the results. Determine whether $\hat{\pi}$ is statistically different from zero.
+
+```{r Probablity of churn}
+# 1. Calculate pi_hat
+total_customers <- nrow(telcom_churn)
+churned_customers <- sum(telcom_churn$churn_bool)
+pi.hat <- round((churned_customers / total_customers),4)
+print(paste("The probability of chrun is:",pi.hat))
+
+# 2. Wald Confidence Interval
+alpha = 0.05
+var.wald <- pi.hat/total_customers
+lower <- pi.hat - qnorm(p = 1 - alpha/2) * sqrt(var.wald)
+upper <- pi.hat + qnorm(p = 1 - alpha/2) * sqrt(var.wald)
+ci <- round(pi.hat + qnorm(p = c(alpha/2, 1 - alpha/2)) * sqrt(var.wald), 4)
+print(paste("The 95% confidence interval is:", paste(ci, collapse = " to ")))
+
+# 3. Statistical Test
+# Calculate the standard error
+SE <- sqrt(pi.hat * (1 - pi.hat) / total_customers)
+
+# Compute the t-statistic
+t_stat <- pi.hat / SE
+
+# Degrees of freedom
+df <- total_customers - 1
+
+# Calculate the p-value (two-tailed test)
+p_value <- round((2 * (1 - pt(abs(t_stat), df))), 4)
+
+# Print results
+print(paste("T-statistic:", t_stat))
+print(paste("P-value:", p_value))
+
+```
+
+The interpretation of the confidence interval demonstrates that we are 95% confident the true proportion of churn is between 25.34% and 27.74%.Using a z-test we find the p-value to be far less than the 0.05 alpha value. The pi.hat is statistically different from 0.
+
+## Comparison between senior and non-senior customers (5 points)
+
+Generate a bar plot comparing seniority with churn. Are there differences between senior and non-senior customers in terms of churn?
+
+```{r bar plot}
+# Load ggplot2
+library(ggplot2)
+library(dplyr)
+
+# Summarize the data
+summary_data <- telcom_churn %>%
+  group_by(SeniorCitizen_fact, Churn) %>%
+  summarize(count = n(), .groups = 'drop')
+
+# Generate the bar plot
+ggplot(summary_data, 
+       aes(x = factor(SeniorCitizen_fact), y = count, fill = factor(Churn))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Senior Citizen",
+       y = "Count",
+       fill = "Churn",
+       title = "Comparison of Churn by Senior Citizen Status")
+
+```
+
+## Contingency table (10 points)
+
+Construct a contingency table for the `Senior Citizen` and `Churn` variables and calculate the probabilities of churn for senior and non-senior customers. Determine if there is a significant difference between these probabilities.
+
+```{r Contingency table}
+# Construct the contingency table
+c.table <- table(telcom_churn$SeniorCitizen_fact, telcom_churn$Churn)
+
+# Add labels to the rows and columns
+dimnames(c.table) <- list(
+  "SeniorCitizen" = c("Non-Senior", "Senior"),  # Row labels
+  "Churn" = c("No", "Yes")                      # Column labels
+)
+print(c.table)
+pi.hat.table <- c.table/rowSums(c.table)
+print(pi.hat.table)
+
+# Convert table to data frame for easier manipulation
+contingency_df <- as.data.frame(c.table)
+colnames(contingency_df) <- c("SeniorCitizen", "Churn", "Count")
+
+# Calculate total counts for each SeniorCitizen group
+total_counts <- aggregate(Count ~ SeniorCitizen, data = contingency_df, sum)
+
+# Merge total counts with the contingency data frame
+contingency_df <- merge(contingency_df, total_counts, 
+                        by = "SeniorCitizen", suffixes = c("", ".Total"))
+
+# Calculate probabilities of churn
+contingency_df$Probability <- contingency_df$Count / contingency_df$Count.Total
+
+# Print probabilities
+print(contingency_df)
+
+# Perform chi-squared test to determine if there is a significant difference 
+# between these probabilities.
+chi_sq_test <- chisq.test(c.table)
+
+# Print test results
+print(chi_sq_test)
+```
+
+As the p-value is less than 0.05, there is a significant association between being a senior citizen and the likelihood of churn.
+
+## Confidence intervals for the difference of two probabilities (10 points)
+
+Is there a difference between the proportion of senior and non-senior customers who churned? Use both `Wald` and `Agresti-Caffo` confidence intervals. Comment on their differences or similarities.
+
+```{r CI}
+# Initial variables
+pi.hat1 <- pi.hat.table[1,2]    # Non-senior & churned
+pi.hat2 <- pi.hat.table[2,2]    # Senior &  churned
+
+# Wald
+var.wald <- pi.hat1 * (1-pi.hat1) / 
+  sum(c.table[1,]) + pi.hat2 * (1-pi.hat2) / sum(c.table[2,])
+ci_wald <- pi.hat1 - pi.hat2 + qnorm(p = c(alpha/2, 1-alpha/2)) * sqrt(var.wald)
+print(paste("The 95% WALD confidence interval is:", paste(ci_wald, collapse = " to ")))
+
+# Agresti-Caffo
+pi.tilde1 <- (c.table[1,2] + 1) / (sum(c.table[1,])+2)
+pi.tilde2 <- (c.table[2,2] + 1) / (sum(c.table[2,])+2)
+var.ac <- pi.tilde1 * (1-pi.tilde1) / 
+  sum(c.table[1,] + 2) + pi.tilde2 * (1-pi.tilde2) / sum(c.table[2,] + 2)
+ci_ac <- pi.tilde1 - pi.tilde2 + qnorm(p = c(alpha/2, 1-alpha/2)) * sqrt(var.ac)
+print(paste("The 95% Agresti-Caffo CI is:",
+            paste(ci_ac, collapse = " to ")))
+
+```
+
+In the previous section, there was a 0.18 difference in the proportion of senior and non-senior customers who churned. As shown above, the two different confidence intervals are very similar in their ranges for the difference in the proportions of churning between seniors and non-seniors. Therefore, there is a significant difference in the proportion of senior and non-senior customers who churned.
+
+## Test for the difference of two probabilities (10 points)
+
+To confirm the results in part `c`, conduct a hypothesis test to assess whether the probability of churn differs between senior and non-senior customers.
+
+-   The hypothesis is given below:
+
+$$H_0: \pi_{senior} - \pi_{non-senior} = 0$$ $$H_0: \pi_{senior} - \pi_{non-senior} \neq 0$$
+
+```{r Test for the difference}
+# Get size of all populations
+n_non_senior = sum(c.table[1,])
+n_senior = sum(c.table[2,])
+
+# Get count of all churned by senior status
+w_senior <- c.table[2,2]    # Count of Senior & Churned
+w_non_senior <- c.table[1,2]    # Count of non-senior & churned
+
+# Initialize all probabilities
+pi.hat.non.senior <- pi.hat.table[1,2]    # Proportion Non-senior & churned
+pi.hat.senior <- pi.hat.table[2,2]    # Proportion Senior &  churned
+pi.hat.combined <- (c.table[1,2] + c.table[2,2]) / total_customers
+
+# Standard Error
+se_diff <- sqrt(pi.hat.combined * (1 - pi.hat.combined) * 
+                  (1 / n_senior + 1 / n_non_senior))
+
+# Z-statistic
+z_stat <- (pi.hat.senior - pi.hat.non.senior) / se_diff
+
+# P-value
+# pnorm(-abs(z_stat)) gives the area to the left of -abs(z_stat)
+# Doubling the area to the left of -abs(z_stat) covers both tails of the distribution.
+p_value_z_stat <- 2 *pnorm(-abs(z_stat))
+
+# Conclusion
+if (p_value_z_stat < alpha) {
+  conclusion <- 
+    "Reject the null hypothesis: There is a significant difference in churn rates."
+} else {
+  conclusion <- 
+    "Fail to reject the null hypothesis: No significant difference in churn rates."
+}
+
+# Output results
+print(paste("Z-Statistic: ", round(z_stat, 4)))
+print(paste("P-Value: ", p_value_z_stat))
+print(conclusion)
+
+```
+
+Per the z-test performed, we find there to be a statistically significant difference (p-value \<\< 0.05) in the churn rates of the seniors and non-seniors. This is consistent with prior results.
+
+## Relative risks (10 points)
+
+Calculate the relative risk of churn for a senior customer to non-senior customer and its confidence interval, and then interpret the results. Are they consistent with your findings in the previous sections?
+
+```{r relative risk}
+# Relative risk
+RR <- pi.hat.senior / pi.hat.non.senior
+
+# (1-alpha)100% Wald confidence interval
+alpha <- 0.05  # 95% confidence level
+z <- qnorm(1 - alpha / 2)
+
+# Standard Error for log(RR)
+se_log_rr <- sqrt(((1-pi.hat.senior)/(n_senior*pi.hat.senior)) + 
+                    ((1-pi.hat.non.senior)/(n_non_senior*pi.hat.non.senior)))
+
+# Log of the confidence limits
+log_CI_lower <- log(RR) - z * se_log_rr
+log_CI_upper <- log(RR) + z * se_log_rr
+
+# Exponentiate to get the CI for RR
+CI_lower <- exp(log_CI_lower)
+CI_upper <- exp(log_CI_upper)
+
+# Output results
+print(paste("Relative Risk:", RR))
+print(paste(
+  "The 95% Wald CI for the relative risk is:",
+  CI_lower, "to", CI_upper))
+
+```
+
+With a Relative Risk (RR) of 1.77, seniors are 77% more likely to churn than non-seniors. The 95% confidence interval for the relative risk ranges from 1.63 to 1.92. We can be 95% confident that the relative risk of churn for senior customers compared to non-senior customers lies within this interval. The relative risk is statistically significant since the confidence interval does not include 1 (equal proportions), confirming that senior customers are more likely to churn. These results are consistent with the findings from the previous z-test, where we concluded that there is a statistically significant difference in churn rates between senior and non-senior customers. The relative risk provides further evidence supporting this conclusion by quantifying the extent of the difference.
+
+## Odds ratios (10 points)
+
+Calculate the odds of a senior customer churning compared to a non-senior customer. Then, compute the confidence interval of the odds ratio and comment on the results.
+
+```{r  Odds ratios}
+# Odds ratio
+odds_senior <- pi.hat.senior/(1-pi.hat.senior)
+odds_non_senior <- pi.hat.non.senior/(1-pi.hat.non.senior)
+OR <- odds_senior / odds_non_senior
+
+# Standard Error for log(RR)
+se_log_or <- sqrt((1/w_senior) + (1/(n_senior - w_senior)) + 
+                   (1/w_non_senior) + (1/(n_non_senior - w_non_senior)) )
+
+# Log of the confidence limits
+log_or_lower <- log(OR) - z * se_log_or
+log_or_upper <- log(OR) + z * se_log_or
+
+# Exponentiate to get the CI for RR
+OR_lower <- exp(log_or_lower)
+OR_upper <- exp(log_or_upper)
+
+# Output results
+print(paste("Odds Ratio:", OR))
+print(paste("The 95% Wald CI for the odds ratio is:"
+            , OR_lower, "to", OR_upper))
+```
+
+With an Odds Ratio of 2.31, the estimated odds of seniors churning are 2.31 times as large as that of non-seniors. The 95% confidence interval for the odds ratio ranges from 2.03 to 2.64 We can be 95% confident that the odds ratio of churn for senior customers compared to non-senior customers lies within this interval. The odds ratio is statistically significant since the confidence interval does not include 1 (equal odds), confirming that senior customers are more likely to churn. These results are consistent with the findings from all previous findings, where we concluded that there is a statistically significant difference in churn rates between senior and non-senior customers.
