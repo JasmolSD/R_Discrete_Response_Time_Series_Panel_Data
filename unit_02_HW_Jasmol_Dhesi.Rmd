@@ -1,0 +1,345 @@
+---
+title : 'W271 Assignment 2'
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
+---
+
+```{r load packages, message=FALSE}
+library(tidyverse)
+```
+
+**Instructions**
+
+Here are some resources that may come in handy as you work on this assignment:
+
+-   Access the most updated version of the assignment on the course's [GitHub organization](http://github.com/mids-w271).
+-   Complete your assignments using [iSchool DataHub](http://ischool.datahub.berkeley.edu/).
+-   Submit your assignment to [Gradescope](https://www.gradescope.com/).
+
+# Customer churn study: **Part-2** (100 Points)
+
+In the previous homework assignment, you began modeling a binary variable using customer churn data from a telecommunications company to analyze churn tendencies among senior and non-senior customers.
+
+Now, in Part-2 of the homework, we will delve into regression techniques to develop a more comprehensive model for the telecom company. This model will provide insights into the reasons why customers may choose to discontinue their services.
+
+```{r load of the data}
+telcom_churn <- read.csv("Telco_Customer_Churn.csv", header=T,na.strings=c("","NA")) 
+```
+
+Churn dataset consists of 21 variables and 7043 observations. The customer variables are provided below:
+
+For the remainder of this section, pay particular attention to `Churn,` `tenure,` `MonthlyCharges,` and `TotalCharges.`
+
+## Data Preprocessing (5 Points)
+
+In this section, review the data structure to ensure the correct data types for variables of interest, convert variables as necessary, and address any missing values.
+
+```{r data_preprocessing}
+# Get the dimensions and examine variables of the dataset
+dim(telcom_churn)
+str(telcom_churn)
+
+# Make boolean operator of the Churn state
+telcom_churn$churn_bool <- ifelse(telcom_churn$Churn == "Yes", 1, 0)
+
+# Convert SeniorCitizen to a factor
+telcom_churn$SeniorCitizen_fact <- 
+  factor(telcom_churn$SeniorCitizen, levels = c(0, 1), labels = c("No", "Yes"))
+
+```
+
+```{r convert to factor}
+telcom_churn$SeniorCitizen= factor(telcom_churn$SeniorCitizen,
+                                   c(0,1), labels = c('No','Yes'),
+                                   ordered = is.ordered(telcom_churn))
+telcom_churn$Churn= factor(telcom_churn$Churn)
+str(telcom_churn)
+```
+
+```{r Check for Null Values}
+table(is.na(telcom_churn)) 
+```
+
+```{r Check  Null Values}
+colSums(is.na(telcom_churn)) 
+```
+
+```{r Summary of the data}
+summary(telcom_churn)
+```
+
+## Maximum Likelihood (15 Points)
+
+Let's build off of the maximum likelihood model of a binomial distribution from lecture and apply it to the churn data set.
+
+Our objective is to estimate the probability of a customer churning based on their `tenure` with the company. While we will use logistic regression in subsequent sections, here, we will focus on the maximum likelihood approach.
+
+Suppose that we can express the probability of a customer churning as a function of tenure in the following form (you should recognize this as the connection between log odds and probability from the lecture):
+
+$$P(Churn)=P(\alpha,\beta)=\frac{e^{\alpha+\beta*Tenure}}{1+e^{\alpha+\beta*Tenure}}$$
+
+Using this and assuming the number of churned customers in the data set follows a binomial distribution with parameters $n$ and $p(\alpha,\beta)$, **write down the likelihood function** $L(\alpha,\beta|Data)$.
+
+> Initially, we derive the likelihood by multiplying the probability density function for each Pi, and subsequently, we simplify the resulting expression. Since the data is binomially distributed, the probability of a customer churning, given their tenure, is modeled by the equation below, where Yi is the churn status of the customer (0 or 1).
+
+$$
+\begin{aligned}
+  L(\alpha, \beta|Data) & = \prod_i^n P(\alpha, \beta) \\
+  & = \prod_i^n P_i^{Y_i} \ \cdot \ \left(1-P_i \right)^{Y_i} \\
+  & = \prod_i^n  \left( \frac{e^{\alpha + \beta \cdot Tenure_i}}{1 + e^{\alpha + \beta \cdot Tenure_i}} \right)^{Y_i} \cdot \ \left( \frac{1}{1 + e^{\alpha + \beta \cdot Tenure_i}} \right)^{1 - Y_i}\\
+\end{aligned}
+$$
+
+## Write and compute the log-likelihood (10 Points)
+
+Find the **negative log likelihood** and write an R function to calculate it given inputs of alpha and beta and using the churn data.
+
+> The corresponding log-likelihood function is derived as below:
+
+$$
+\begin{aligned}
+  log(L(\alpha, \beta|Data)) & = log \left(\prod_i^n P_i^{Y_i} \ \cdot \ \left(1-P_i \right)^{Y_i} \right) \\
+  & = log \left(\prod_i^n  \left( \frac{e^{\alpha + \beta \cdot Tenure_i}}{1 + e^{\alpha + \beta \cdot Tenure_i}} \right)^{Y_i} \cdot \ \left( \frac{1}{1 + e^{\alpha + \beta \cdot Tenure_i}} \right)^{1 - Y_i} \right) \\
+  &= \sum_i^n Y_i log(P_i) \ + \ (1 - Y_i) \cdot log(1-P_i)
+\end{aligned}
+$$
+
+> Simplifying further
+
+$$
+\begin{aligned}
+  log(L(\alpha, \beta|Data)) &= \sum_i^n Y_i log(P_i) \ + \ (1 - Y_i) \cdot log(1-P_i) \\
+  &= \sum_i^n Y_i log(\frac{e^{\alpha + \beta \cdot Tenure_i}}{1 + e^{\alpha + \beta \cdot Tenure_i}}) \ + \ (1 - Y_i) \cdot log(\frac{1}{1 + e^{\alpha + \beta \cdot Tenure_i}}) \\
+  &= \sum_i^n Y_i(\alpha + \beta \cdot Tenure_i) + log(1 + e^{\alpha + \beta \cdot Tenure_i})
+\end{aligned}
+$$
+
+> The negative log-likelihood is:
+
+$$
+\begin{aligned}
+  log(L(\alpha, \beta|Data)) &= \sum_i^n Y_i(\alpha + \beta \cdot Tenure_i) + log(1 + e^{\alpha + \beta \cdot Tenure_i}) \\
+  NLL(\alpha, \beta|Data)) &= -\sum_i^n Y_i(\alpha + \beta \cdot Tenure_i) + log(1 + e^{\alpha + \beta \cdot Tenure_i})
+\end{aligned}
+$$
+
+```{r negatilve_log_likelihood}
+# Define the negative log likelihood function
+negative_log_likelihood <- function(parameters, data, ...) {
+  # Use the standard log-likelihood function
+  # log-likelihood = sum(y_i * log(P_i) + (1-y_i)*log(1-P_i))
+  # P is the probability of customer churn
+  alpha = parameters[1]
+  beta = parameters[2]
+  
+  
+  # Extract churn status and tenure
+  Y <- data$churn_bool      # Binary values: 1 if customer churned, else 0
+  Tenure <- data$tenure
+  
+  # Calculate the linear term (alpha + beta * Tenure)
+  nll_first_term <- alpha + beta * Tenure
+  
+  # Probability of churn
+  p_churn <- exp(nll_first_term) / (1 + exp(nll_first_term))
+  
+  # Compute the negative log likelihood
+  NLL <- -sum(Y * log(p_churn) + (1 - Y) * log(1 - p_churn))
+  
+  # Return NLL output
+  return(NLL)
+}
+```
+
+## Compute the MLE of parameters (10 Points)
+
+Use the optim function to **find the MLE of alpha and beta on the churn data**. You can use starting values of 0 for both parameters. Note that optim by default finds the minimum, so you can use the negative log likelihood directly.
+
+```{r MLE}
+MLE_optim <- optim(par = c(0,0), fn = negative_log_likelihood, data = telcom_churn)
+
+# Extract the MLE estimates for alpha and beta
+alpha_hat <- MLE_optim$par[1]
+beta_hat <- MLE_optim$par[2]
+
+# Print the MLE estimates for alpha and beta
+cat("MLE for alpha:", alpha_hat, "\n")
+cat("MLE for beta:", beta_hat, "\n")
+
+```
+
+## Calculate a confidence interval (10 Points)
+
+Again using the optim function, find the **variance of the MLE estimates** (hint use hessian = TRUE in optim) for alpha and beta. Calculate a **95% confidence interval** for each parameter. Are they statistically different than zero?
+
+```{r MLE_CI}
+MLE_optim_1 <- optim(par = c(0,0), fn = negative_log_likelihood, 
+                     data = telcom_churn, hessian = TRUE)
+
+# Extract the MLE estimates for alpha and beta
+alpha_hat <- MLE_optim_1$par[1]
+beta_hat <- MLE_optim_1$par[2]
+
+# Get cov matrix of the estimators from Hessian
+cov_matrix <- solve(MLE_optim_1$hessian)
+
+# Get variance/diagonals of the covariance matrix
+var_alpha <- cov_matrix[1, 1]
+var_beta <- cov_matrix[2, 2]
+
+# Standard errors
+se_alpha <- sqrt(var_alpha)
+se_beta <- sqrt(var_beta)
+
+# 95% confidence intervals for alpha and beta
+# 1.96 is the 95th percentile critical values
+alpha_ci_lower <- alpha_hat - 1.96 * se_alpha
+alpha_ci_upper <- alpha_hat + 1.96 * se_alpha
+
+beta_ci_lower <- beta_hat - 1.96 * se_beta
+beta_ci_upper <- beta_hat + 1.96 * se_beta
+
+# Print the results
+cat("MLE for alpha:", alpha_hat, "\n")
+cat("95% CI for alpha: [", alpha_ci_lower, ", ", alpha_ci_upper, "]\n")
+cat("MLE for beta:", beta_hat, "\n")
+cat("95% CI for beta: [", beta_ci_lower, ", ", beta_ci_upper, "]\n")
+
+# Check if alpha and beta are statistically different from zero
+cat("Is alpha statistically different from 0?",
+    !(0 >= alpha_ci_lower & 0 <= alpha_ci_upper), "\n")
+cat("Is beta statistically different from 0?",
+    !(0 >= beta_ci_lower & 0 <= beta_ci_upper), "\n")
+
+```
+
+## Model comparison (10 Points)
+
+Estimate a logistic regression model with `tenure` as the independent variable. Compare **MLE of alpha and beta to the output of the logistic regression**. What do you notice? Can you think of why this is the case? (Think about the connection between MLE of regression coefficients and linear regression)
+
+```{r Maximum_Likelihood_logistical_model}
+# Logistical Model for MLE
+mle_reduced <-  glm(churn_bool ~ tenure, family=binomial(link = logit),
+                    data = telcom_churn)
+
+# Summary of the linear model
+summary(mle_reduced)
+```
+
+Alpha and Beta from the optimization model closely match the intercept and tenure coefficient values in the regression model. This is likely due to the regression model being logistic and logistical models using MLE to estimate parameters. Since both models use the same calculation methods, the coefficients area the same.
+
+## Extended Model, with Linear Effects (10 Points)
+
+Use the `Churn`, `tenure`, `MonthlyCharges`, and `TotalCharges` as independent variables in a logistic regression model for predicting a customer churning. Proceed to estimate the model and subsequently, interpret each of the indicator variables incorporated within the model.
+
+```{r Maximum_Likelihood}
+# Logistical Model for MLE with all indicator variables
+mle_full <-  glm(churn_bool ~ tenure + MonthlyCharges + TotalCharges,
+                 family=binomial(link = logit), data = telcom_churn)
+
+# Summary of the linear model
+summary(mle_full)
+```
+
+The model summary indicates each of the indicators variables to be statistically significant. Tenure is estimated to decrease Churn by -6.7E-02 for each year of tenure. Practically, this means loyal customers are more likely to stay. MonthlyCharges is estimated to increase Churn by 3.02E-02 for each unit, practically speaking, a higher charge may influence a customer to churn. TotalCharges is estimated to increase Churn by 1.45E-04 for each unit. Practically, customers who have spent more overall will be marginally more enticed to churn.
+
+## Likelihood Ratio Tests (10 Points)
+
+Perform likelihood ratio tests for all independent variables to evaluate their importance within the model. Discuss and interpret the results of these tests.
+
+```{r LRT, echo = FALSE}
+# Install the car library if not already installed
+if(!"car"%in%rownames(installed.packages())) {install.packages("car")}
+library(car)
+
+# Remove NA from indicator variables
+telcom_churn_cleaned <- na.omit(telcom_churn[, c("churn_bool", "tenure", "MonthlyCharges", "TotalCharges")])
+
+# Null hypothesis model
+mod.fit.H0 <- glm(churn_bool ~ tenure, family=binomial(link = logit), data = telcom_churn_cleaned)
+
+# glm model with variable MonthlyCharges
+mod.fit.MC <- glm(churn_bool ~ tenure + MonthlyCharges, family=binomial(link = logit), data = telcom_churn_cleaned)
+
+# glm model with variable TotalCharges
+mod.fit.TC <- glm(churn_bool ~ tenure + TotalCharges, family=binomial(link = logit), data = telcom_churn_cleaned)
+
+# glm model with variable MonthlyCharges and TotalCharges
+mod.fit.full <- glm(churn_bool ~ tenure + MonthlyCharges + TotalCharges, family=binomial(link = logit), data = telcom_churn_cleaned)
+
+# Perform likelihood ratio tests using the anova function
+lrt_MC <- anova(mod.fit.H0, mod.fit.MC, test = "LRT")
+lrt_TC <- anova(mod.fit.H0, mod.fit.TC, test = "LRT")
+lrt_full <- anova(mod.fit.H0, mod.fit.full, test = "LRT")
+
+# Display the results
+print(lrt_MC)
+print(lrt_TC)
+print(lrt_full)
+```
+
+**Null Hypothesis for each independent variable** Adding the independent variable does not significantly improve the model fit.
+
+**Interpretation of Results** The likelihood ratio tests reveal that both MonthlyCharges and TotalCharges significantly improve the model's fit for predicting customer churn compared to using only tenure. The improvement of the fitted model is significant statistically due to reduced deviations and small p-values, as well as practically, since the cost can often contribute to churn.
+
+## Effect of change in Monthly payments (10 Points)
+
+What is the effect of a standard deviation increase in `MonthlyCharges` on the odds of the customer getting churned? Also, calculate the Wald CI for the odds ratio.
+
+```{r OR MonthlyCharge}
+# Extract the coefficient and standard error for MonthlyCharges
+coef_MC <- coef(mod.fit.full)["MonthlyCharges"]
+se_MC <- sqrt(vcov(mod.fit.full)["MonthlyCharges", "MonthlyCharges"])
+
+# Calculate the standard deviation of MonthlyCharges
+sd_MC <- sd(telcom_churn_cleaned$MonthlyCharges)
+
+# Calculate the change in MC by 1 sd
+
+
+# Calculate the odds ratio for a SD of MonthlyCharges
+OR <- exp(coef_MC*sd_MC)
+
+# Calculate the 95% Wald confidence interval for the odds ratio
+z_value <- qnorm(0.975)  # Z value for 95% CI
+OR_CI_lower <- exp(coef_MC - z_value * se_MC)
+OR_CI_upper <- exp(coef_MC + z_value * se_MC)
+
+# Print results
+cat("Odds Ratio for one SD increase to MonthlyCharge:", OR, "\n")
+cat("95% Wald CI for the Odds Ratio: (", OR_CI_lower, ", ", OR_CI_upper, ")\n")
+```
+
+## Confidence Interval for the Probability of Success (10 Points)
+
+Estimate the 95% profile likelihood confidence interval for the probability of a customer getting churned, considering an average `tenure,` `MonthlyCharges,` and `TotalCharges.`
+
+```{r CI for Probabiliy of Success}
+# Establish an alpha value for the CI
+CI_alpha = 0.05
+
+# Average values of tenure, MonthlyCharges, and TotalCharges
+avg_tenure <- mean(telcom_churn_cleaned$tenure)
+avg_MonthlyCharges <- mean(telcom_churn_cleaned$MonthlyCharges)
+avg_TotalCharges <- mean(telcom_churn_cleaned$TotalCharges)
+
+# Data frame for prediction model
+predict.data <- data.frame(tenure = avg_tenure, MonthlyCharges = avg_MonthlyCharges,
+                           TotalCharges = avg_TotalCharges)
+
+# Prediction model
+linear.pred <- predict(object = mod.fit.full,
+                       newdata = predict.data, type = "link", se = TRUE)
+
+# CI for the predictive model
+CI.lin.pred <- linear.pred$fit[1] + 
+  qnorm(p = c(CI_alpha/2, 1-CI_alpha/2)) * linear.pred$se.fit[1]
+
+# Convert to probability scale
+CI.lin <- round(exp(CI.lin.pred)/(1+exp(CI.lin.pred)),4)
+
+# Print Results
+cat("95% profile likelihood CI: (", CI.lin[1], ", ", CI.lin[2], ")\n")
+```
