@@ -1,0 +1,1083 @@
+---
+title: "271: Lab 1"
+author: "Jasmol Dhesi, Jonathan Ho, Achintya Kattemalavadi, Diego Moss"
+date: "2024-09-30"
+output:
+  bookdown::pdf_document2:
+    toc: true
+    number_sections: true
+    latex_engine: xelatex
+fontsize: 11pt
+geometry: margin=1in
+header-includes:
+  - \usepackage{dcolumn}
+  - \usepackage{float}
+  - \usepackage{amsmath}
+---
+
+\newpage
+
+# Part 1: Political ideology (30 points)
+
+These questions are based on Question 14 of Chapter 3 of the textbook "Analysis of Categorical Data with R" by Bilder and Loughin.
+
+> An example from Section 4.2.5 examines data from the 1991 U.S. General Social Survey that cross-classifies people according to
+
+> -   Political ideology: Very liberal (VL), Slightly liberal (SL),Moderate (M), Slightly conservative (SC), and Very conservative (VC)
+> -   Political party: Democrat (D) or Republican (R)
+> -   Gender: Female (F) or Male (M).
+
+> Consider political ideology to be a response variable, and political party and gender to be explanatory variables. The data are available in the file pol_ideol_data.csv.
+
+## Recode Data (2 points)
+
+Use the factor() function with the ideology variable to ensure that R places the levels of the ideology variable in the correct order.
+
+```{r load packages, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(stargazer)
+library(nnet)
+library(car)
+library(MASS)
+#install.packages('VGAM')
+library(VGAM)
+library(patchwork)
+#install.packages('brant')
+library(brant)
+library(knitr)
+library(Hmisc)
+library(patchwork)
+library(xtable)
+library(AER)
+#install.packages('MuMIn')
+library(MuMIn)
+theme_set(theme_bw()) # set the theme (theme_set is built inside ggplot2)
+```
+
+
+```{r recode data, echo = TRUE}
+
+# Load data
+# data <- read_csv("//wsl.localhost/Ubuntu/home/diego/github/fall2024-271-Lab-1/pol_ideol_data.csv")
+data <- read_csv("pol_ideol_data.csv")
+# Convert data to dataframe
+data <- as.data.frame(data)
+data <- na.omit(data)
+
+# Check if data loads correctly
+data %>% head() #head matches the csv file
+data %>% tail() #tail matches the csv file
+
+# Recode gender, party and ideol variables to factor
+data$gender <- factor(data$gender, levels = c("F", "M"))
+data$party <- factor(data$party, levels = c("D", "R"))
+data$ideol <- factor(data$ideol, levels = c("VL", "SL", "M",  "SC", "VC"))
+
+# Check levels for gender, party, and ideol variables
+levels(data$gender)
+levels(data$party)
+levels(data$ideol)
+
+```
+
+\newpage
+
+## Test for Independence (5 points)
+
+Analyze the relationships between political ideology and political party and gender using basic visualizations. Afterward, generate a contingency table and assess the independence of political ideology from political party and gender.
+
+```{r bar plots one , echo = TRUE, fig.align='center', fig.height=5, fig.width=11, out.width="100%"}
+gender_plot<-ggplot(data = data, aes(x = gender, y = count)) +
+  geom_bar(position = 'dodge', stat = 'identity') +
+  labs(title = "Count of Gender",
+       x = 'Gender',
+       y='Count')
+
+party_plot<-ggplot(data = data, aes(x = party, y = count)) +
+  geom_bar(position = 'dodge', stat = 'identity')+
+  labs(title = "Count of Party",
+       x = 'Party',
+       y='Count')
+
+
+ideology_plot<-ggplot(data = data, aes(x = ideol, y = count)) +
+  geom_bar(position = 'dodge', stat = 'identity') +
+  labs(title = "Count of Ideology",
+       x = 'Ideology',
+       y='Count')
+
+
+gender_plot | party_plot | ideology_plot
+
+```
+We first note that there are about twice as many female as males overall, about a third more Democrats than Republicans, and that across ideology, there are the most Moderates.
+
+```{r,  bar plots two, echo = TRUE, fig.align='center', fig.height=5, fig.width=11, out.width="100%"}
+gender_ideol_plot <- ggplot(data = data, aes(x = gender, y = count, fill = ideol)) +
+  geom_bar(stat = 'identity', position = 'fill') + 
+  labs(title = 'Males lean more Conservative', x = 'Political Ideology', 
+       y = 'Percentage', fill = 'Political Ideology') + 
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c("VL" = "darkblue",    # Very Liberal
+                               "SL" = "lightblue",    # Liberal
+                               "M" = "grey",         # Moderate
+                               "SC" = "lightcoral",  # Slightly Conservative
+                               "VC" = "darkred")) +  # Very Conservative
+  theme_minimal()
+
+party_ideol_plot <- ggplot(data = data, aes(x = ideol, y = count, fill = party)) +
+  geom_bar(stat = 'identity', position = 'fill') + 
+  labs(title = 'Democrats lean liberal, Republicans lean conservative', 
+       x = 'Political Ideology', 
+       y = 'Percentage', fill = 'Party') + 
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c("D" = "darkblue", "R" = "lightcoral")) +
+  theme_minimal()
+
+gender_ideol_plot | party_ideol_plot
+```
+We note that males tend to lean more conservative, and seem less likely to be moderate. We also note that Democrats tend to lean more liberal in their political ideology, and Republicans more conservative.
+
+```{r Create a contingency table and test for the independence}
+
+# Create a contingency table for political ideology and gender using the count column
+cont_table_gender <- xtabs(count ~ gender + ideol, data = data)
+
+# Create a contingency table for political ideology and party using the count column
+cont_table_party <- xtabs(count ~ party + ideol, data = data)
+
+# Perform chi-squared tests
+chisq.test(cont_table_gender)
+chisq.test(cont_table_party)
+```
+
+The chi-squared tests return a p-value below .05. We thus reject the null hypothesis that gender and political ideology are independent, and that party and political ideology are independent.
+
+\newpage
+
+## Regression analysis (5 points)
+
+Estimate a multinomial regression model and ordinal (proportional odds) regression model that both include party, gender, and their interaction. Perform Likelihood Ratio Tests (LRTs) to test the importance of each explanatory variable.
+
+Also, test whether the proportional odds assumption in the ordinal model is satisfied. Based on this test and other results, which model do you think is more valid?
+
+```{r multinomial regression and LRT, echo = TRUE}
+
+# Set reference categories
+data$ideol <- relevel(data$ideol, ref = "M")  # Moderate as reference
+data$party <- relevel(data$party, ref = "D")  # Democrat as reference
+data$gender <- relevel(data$gender, ref = "F")  # Female as reference
+
+# Create multinomial model for explanatory model and interactions
+model_multinominal <- multinom(formula = ideol ~ party * gender, 
+                               weights = count, data = data)
+summary(model_multinominal)
+
+# Perform Likelihood Ratio Test
+Anova(model_multinominal)
+
+```
+
+We note that the variable party is statistically significant in predicting political ideology, but neither the variable gender nor the interaction term are statistically significant for an alpha of 0.05.
+
+```{r proportional odds regression and LRT, echo = TRUE}
+# Set order for political ideology variable
+data$ideol.order <- factor(data$ideol, 
+                           levels = c("VC","SC","M","SL","VL"),ordered = TRUE)
+# Check order for political ideology variable
+levels(data$ideol.order)
+# Create proportional odds model
+model_propodds <- vglm(formula = ideol.order ~ party * gender, 
+                       data = data, family = cumulative(parallel = TRUE), 
+                       weights = count)
+
+summary(model_propodds)
+
+
+# Perform Likelihood Ratio Test
+Anova(model_propodds)
+
+```
+
+```{r testing proportional odds assumption}
+# Create non-proportional odds model
+model_nonpropodds <- vglm(formula = ideol.order ~ party * gender, data = data, 
+                          family = cumulative(parallel = FALSE), 
+                          weights = count)
+
+summary(model_nonpropodds)
+
+# Test proportional odds assumption
+anova(model_propodds, model_nonpropodds, type = "I")
+```
+
+The LRT results in a statistic of $-2\log{(\Lambda)} = 11.063$ and a p-value of $0.2714$. Thus, at a 0.05 level, there is insufficient evidence to indicate the proportional odds assumption has been violated.
+
+Comparing the multinomial model and the proportional odds model, we ascertain the proportional odds model to be more valid since 1) there is insufficient evidence to claim that the proportional odds assumption is violated and 2) there is a natural ordering of the response variable, from Very Conservative to Very Liberal. 
+
+\newpage
+
+## Estimated probabilities (5 points)
+
+Compute the estimated probabilities for each ideology level given all possible combinations of the party and gender levels.
+
+```{r estimated probabilities for each ideology level}
+# Creating a table with all combinations of party and gender
+new_data <- expand.grid(party = levels(data$party),
+                        gender = levels(data$gender))
+
+# Calculating predicted probabilities
+predicted_probs_multinom <- predict(model_multinominal, newdata = new_data, 
+                                    type = "probs")
+
+# Adding the predicted probabilities to the combinations of party and gender
+result_multinom <- cbind(new_data, predicted_probs_multinom)
+
+# Presenting table 
+kable(result_multinom, digits = 3, col.names = 
+        c("Party", "Gender", "VC", "SC", "M", "SL", "VL"),
+      caption = "Predicted Probabilities of Political Ideology 
+      for Different Party and Gender Combinations")
+```
+
+\newpage
+
+## Contingency table of estimated counts (5 points)
+
+Construct a contingency table with estimated counts from the model. These estimated counts are found by taking the estimated probability for each ideology level multiplied by their corresponding number of observations for a party and gender combination.
+
+For example, there are 264 observations for gender = "F" and party = "D". Because the multinomial regression model results in $\hat{\pi}_{VL} = 0.1667$, this model’s estimated count is $0.1667 \times 264 = 44$.
+
+-   Are the estimated counts the same as the observed? Conduct a goodness of fit test for this and explain the results.
+
+```{r a contingency table with estimated counts}
+
+# Getting counts for each party-gender combination
+counts_per_pg <- data %>%
+  group_by(gender, party) %>%
+  summarise(
+    count = sum(count)
+  )
+# Multiplying into existing probability table
+count_c_tab <- round(result_multinom[,3:7] * counts_per_pg$count)
+count_c_tab <- cbind(new_data, count_c_tab)
+
+# Reorder columns in count_c_tab to match result_multinom
+count_c_tab <- count_c_tab[, c("party", "gender", "VC", "SC", "M", "SL", "VL")]
+
+# Display table
+kable(count_c_tab, digits=0, caption = "Predicted Counts of Political Ideology 
+      for Different Party and Gender Combinations")
+
+```
+
+```{r goodness of fit test for observed vs. expected}
+
+# Reshaping the predicted counts table
+pred_counts_reshape <- gather(
+  count_c_tab,
+  key = "ideol",
+  value = "count",
+  VC:VL
+)
+
+
+# Doing the test
+g_f_test <- chisq.test(
+  x = data$count,
+  p = pred_counts_reshape$count,
+  rescale.p = TRUE
+)
+
+g_f_test
+
+```
+
+With the following null and alternate hypotheses:
+
+-   $H_0$: There is no significant difference between the observed and estimated distributions of ideology against gender and political party.
+-   $H_a$: There is a significant difference between the observed and estimated distributions of ideology against gender and political party.
+
+and given the results of the goodness-of-fit test above, we reject the null hypothesis due to $p<2.2*10^{-16}$. Thus, the estimated counts are not the same as the observed.
+
+\newpage
+
+## Odds ratios and confidence intervals (8 points)
+
+To better understand relationships between the explanatory variables and the response, compute odds ratios and their confidence intervals from the estimated models and interpret them.
+
+```{r odds_ratio}
+# Compute odds ratio (multinom)
+odds_ratios_multinom <- exp(coef(model_multinominal))
+print(odds_ratios_multinom)
+
+odds_ratios_propodds<- exp(coef(model_propodds))
+print(odds_ratios_propodds)
+```
+
+```{r confidence_interval}
+# Suppress output while computing confidence intervals
+suppressMessages({
+  suppressWarnings({
+    ## multinomial
+    # Calculate confidence intervals for the log-odds
+    ci_multinom <- confint(model_multinominal)
+    # Exponentiate to get the odds ratio confidence intervals
+    odds_ratios_ci <- exp(ci_multinom)
+    # Display the odds ratio confidence intervals
+    print(odds_ratios_ci)
+  })
+})
+```
+
+The odds ratios and confidence intervals calculated from the multinomial model suggest the following:
+
+- There is sufficient evidence to show that being a Republican increases the odds ratios of identifying as Conservative (SC or VC) when compared to being Moderate, and holding all other variables constant.
+
+- There is insufficient evidence that being a Republican decreases the odds ratios of identifying as Liberal groups (VL or SL) when compared to being Moderate, and holding all other variables constant.
+
+- There is sufficient evidence that being Male increases the odds ratio of identifying as Very Liberal when compared to being Female, and holding all other variables constant. There is insufficient evidence to that being Male increases the odds ratio of identifying as Very Conservative, Slightly Conservative, and Slightly Liberal.
+
+- There is insufficient evidence that being both Republican and Male has a meaningful impact on the response variable.
+
+We also look at the proportional odds model, below, which is slightly more difficult to interpret.
+
+
+```{r odds ratio propodds}
+# Compute odds ratio (propodds)
+odds_ratios_propodds <- exp(coef(model_propodds))
+print(odds_ratios_propodds)
+```
+
+```{r confidence_interval propodds}
+# Suppress output while computing confidence intervals
+suppressMessages({
+  suppressWarnings({
+    # Calculate confidence intervals 
+    ci_propodds <- confint(model_propodds)
+    # Exponentiate to get the odds ratio confidence intervals
+    odds_ratios_ci_propodds <- exp(ci_propodds)
+    # Display the odds ratio confidence intervals
+    print(odds_ratios_ci_propodds)
+  })
+})
+```
+With the ordering VC, SC, M, SL, VL,
+- There is sufficient evidence that  the estimated odds of someone's political ideology being below a particular level changes by 2.1301813 times when one moves from Democrat to Republican with a 95% confidence interval of (1.5358277, 2.9545453).
+
+- There is insufficient evidence that  the estimated odds of someone's political ideology being below a particular level changes in a meaningful way when oneis Male instead of Female.
+
+\newpage
+
+# Part 2: Bike Share Demand, Introduction (5 points)
+
+The introduction of rental bikes in urban cities has significantly enhanced mobility and convenience, and reduced traffic pollution. However, ensuring that rental bikes are always available and accessible to customers who need them is critical for customers to make bike rentals a regular part of their lifestyle. Thus, a stable and reliable supply of rental bikes is a key issue for city planners and operators. We aim to provide decision-makers through this report with insights into the factors influencing bike usage and demand, that they may better facilitate the optimal availability of rental bikes to the public when needed.
+
+In particular, we will test the null hypothesis ($H_0$):
+
+```{=tex}
+\begin{quote}
+  \textit{External conditions, namely temperature, rainfall, season, time of day, and public holidays have no significant effect on the number of bike rentals per hour in Seoul.}
+\end{quote}
+```
+
+With the following alternative hypothesis ($H_a$):
+
+```{=tex}
+\begin{quote}
+  \textit{External conditions, namely temperature, rainfall, season, time of day, and public holidays have a significant effect on the number of bike rentals per hour in Seoul.}
+\end{quote}
+```
+
+# Data (20 points)
+
+## Description (5 points)
+
+The dataset used in this analysis records hourly bike rental demand in Seoul from December 1, 2017, to November 30, 2018, and was sourced from the UC Irvine Machine Learning Repository. The original data is provided by the Seoul Public Data Park website of South Korea (<https://data.seoul.go.kr/>). Although the exact method of data collection is not explicitly described, it is reasonable to assume that automatic tracking systems within Seoul’s bike-sharing infrastructure, alongside weather stations and possibly environmental sensors, were used to collect rental and associated conditions.
+
+The dataset covers the full population of hourly bike rentals in Seoul during this period. Each observation reflects the rental demand, along with the external factors such as different weather attributes like temperature, humidity, wind speed etc., and other factors like whether it was a holiday, that could influence bike rental counts. While the data appears to be comprehensive, covering the entire set of rentals made in Seoul, there is no detailed information on whether any specific sampling methods or randomness was involved in the data collection process.
+
+## EDA (15 points)
+
+```{r Data Pre-processing, echo=FALSE, message = FALSE, warning = FALSE}
+# Load data (change for your location of saved data)
+data_raw <- read_csv("SeoulBikeData.csv", locale = locale(encoding = "ISO-8859-1"))
+# Convert data to dataframe
+data_raw <- as.data.frame(data_raw)
+# Double check that there are no nulls in the dataset, as the source said
+#anyNA(data)
+
+# See datatypes
+#str(data)
+
+# See summary to spot any anomalies in variables
+#describe(data)
+
+# Recode Seasons, 'Functioning Day' and Holiday variables to factor
+# unique(data$Seasons)
+# unique(data$`Functioning Day`)
+# unique(data$Holiday)
+
+# Removing the non-functioning day
+data <-subset(data_raw, `Functioning Day` == 'Yes')
+
+data$Seasons <- factor(data$Seasons, 
+                       levels = c("Winter","Spring","Summer","Autumn"))
+data$`Functioning Day` <- factor(data$`Functioning Day`, 
+                                 levels = c("Yes", "No"))
+data$Holiday <- factor(data$Holiday, levels = c("Holiday", "No Holiday"))
+data$Holiday <- relevel(data$Holiday, ref = "No Holiday") # Set No Holiday as reference
+```
+
+We examined the dataset and spotted no anomalies or missing values. We converted the variables Seasons, Holiday, and Functioning Day to categorical factors. We now do some Exploratory Data Analysis (EDA), and look at the potential influence various weather related variables might have on Rented Bike Count.
+
+```{r EDAxtab, results = 'asis', echo = FALSE, warning = FALSE, message = FALSE, fig.pos='H', fig.align='center', fig.height=3, fig.width=10, out.width="100%"}
+
+# Look at crosstable for Seasons and Rented Bike Count
+season_count_tab<-xtabs(`Rented Bike Count` ~ `Seasons`, data = data)
+
+# Convert the table to a data frame for kable
+season_count_df <- as.data.frame(season_count_tab)
+
+season_count_xtable <- xtable(season_count_df, caption = "Summer has the most number of Bike Rentals", label = 'tab:EDAxtable')
+
+# Print the cross table using kable with a caption
+print(season_count_xtable, comment = FALSE)
+```
+
+We note from Table \@ref(tab:EDAxtable) that summer seems to be the most popular season for bike rentals. We now use a bar plot to look more closely at any trends, and also look at the relationship between Rented Bike Count and Temperature.
+
+```{r EDAplots1, echo = FALSE, warning = FALSE, message = FALSE, fig.pos='H', fig.align='center', fig.height=3, fig.width=10, out.width="100%", fig.cap='Studying how Seasons and Temperature might affect Rented Bike Count'}
+# Group by Seasons and sum total Rented Bike Count
+gby_season <- data %>% group_by(by = `Seasons`) %>% summarise(total_rental_bike_count = sum(`Rented Bike Count`))%>%
+  rename(Seasons = by)
+
+# Plot Seasons and Total Rented Bike Count
+season_count_plot <- ggplot(data = gby_season, aes(x = Seasons, y = total_rental_bike_count)) + 
+  geom_bar(stat = 'identity') +
+  labs(title = 'Summer seems to be the most popular season\nfor bike rentals',
+       x = 'Season',
+       y = 'Total Rented Bike Count')
+
+# Plot Temperature and Rented Bike Count
+temp_count_plot <- ggplot(data = data, aes(x = `Temperature(°C)`, y = `Rented Bike Count`)) + 
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(title = 'Increased temperature seems to increase\nrented bike count',
+       x = 'Temperature(°C)',
+       y = 'Rented Bike Count')
+
+season_count_plot | temp_count_plot
+```
+
+We see from Figure \@ref(fig:EDAplots1) that Winter has the lowest Rented Bike Count, and that there is a positive correlation between Temperature and Rented Bike Count. We now look at Rainfall and Holidays' distribution with the Rented Bike Count.
+
+```{r EDAplots2, echo = FALSE, warning = FALSE, message = FALSE, fig.pos='H', fig.align='center', fig.height=3, fig.width=10, out.width="100%", fig.cap='Studying how Rainfall and Snowfall might affect Rented Bike Count'}
+# Plot Rainfall and Rented Bike Count
+rainfall_count_plot <- ggplot(data = data, aes(x = `Rainfall(mm)`, y = `Rented Bike Count`)) + 
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(title = 'Increased rainfall seems to reduce rented bike count',
+       x = 'Rainfall(mm)',
+       y = 'Rented Bike Count')
+
+# Group by Holiday and sum total Rented Bike Count
+avg_holiday <- data %>% group_by(by = `Holiday`) %>% summarise(avg_rental_bike_count = mean(`Rented Bike Count`))%>%
+  rename(Holiday = by)
+
+# Plot Holiday and Mean of Rented Bike Count
+holiday_count_plot <- ggplot(data = avg_holiday, aes(x = Holiday, y = avg_rental_bike_count)) + 
+  geom_bar(stat = 'identity') +
+  labs(title = 'There seems to be more bike rentals on non-holidays',
+       x = 'Holiday',
+       y = 'Average Rented Bike Count')
+ 
+# Plot Snowfall and Rented Bike Count
+snowfall_count_plot <- ggplot(data = data, aes(x = `Snowfall (cm)`, y = `Rented Bike Count`)) + 
+  geom_point() +
+  labs(title = 'Increased snowfall seems to reduce rented bike count',
+       x = 'Snowfall(cm)',
+       y = 'Rented Bike Count')
+
+rainfall_count_plot | holiday_count_plot
+```
+
+We see from Figure \@ref(fig:EDAplots2) that there might be a negative correlation between Rainfall and Rented Bike Count. We also note the heavy right skew on Rainfall, which we converted into a categorical variable Rainfall Range, with values No Rain, Light Rain, and Heavy Rain. We also note that there is a higher average Rented Bike Count on non-holidays.
+
+```{r convert rainfall to categorical, echo = FALSE}
+
+# Convert rain to categorical variable through ranges
+rain_range_breaks <- c(0, 0.1, 4.0, Inf)
+rain_labels <- c("No Rain", "Light Rain", "Heavy Rain")
+data$`Rainfall Range` <- cut(
+  data$`Rainfall(mm)`,
+  breaks = rain_range_breaks,
+  labels = rain_labels,
+  right = FALSE
+)
+
+# Create categorical bins for the hour of the day
+data$Hour_Cat <- cut(data$Hour,
+                     breaks = c(-1, 5, 11, 17, 21, 24),
+                     labels = c("Night", "Morning", "Afternoon", "Evening", "Night"),
+                     include.lowest = TRUE,
+                     right = FALSE)  # intervals are closed on the left
+
+# Create a binary variable for Snowfall
+data$Snowfall_Binary <- ifelse(data$`Snowfall (cm)` > 0, "Yes", "No")
+
+# Convert the new binary variable to a factor
+data$Snowfall_Binary <- as.factor(data$Snowfall_Binary)
+```
+
+# Model Development (40 points)
+
+## Poisson regression (10 points)
+
+We now use Poisson regression to model our observations. We have 8760 observations of random variable Rented Bike Count $Y_i$, and explanatory variables Temperature and Holiday. We assume that each observation period is short enough that Bike Rentals do not cross across multiple observations. We also assume that for all observations $i = 1, ..., 8760$,
+
+$$Y_i \sim Po(\mu_i)$$
+
+where
+
+$$\mu_i = \text{exp}(\beta_0 + \beta_1 \text{ Temperature}_i+ \beta_2 \text{ Holiday})$$
+
+We thus have a generalized linear model with a Poisson random component, a linear systematic component, and a log link, the model being $\log(\mu) = \beta_0 + \beta_1 \text{ Temperature}+ \beta_2 \text{ Holiday}$. Running the Poisson regression, we get Model 1 below.
+
+\begin{align}
+\log(\mu) &= 5.893 + 0.04448 \text{ Temperature} - 0.1815 \text{ Holiday}
+\label{eq:poisson_model_1}
+\end{align}
+
+```{r model_poisson_1, echo = FALSE, warning = FALSE, message = FALSE, results="asis", fig.pos='H'}
+# Fit the Poisson regression model
+model_poisson_1 <- glm(formula = `Rented Bike Count` ~ `Temperature(°C)` + `Holiday`, 
+                       family = poisson(link = "log"), data = data)
+
+# Generate the model summary
+# summary(model_poisson_1)
+
+# Perform the likelihood ratio test (LRT) and create xtable
+model_poisson_1_anova <- Anova(model_poisson_1)
+model_poisson_1_anova_table <- xtable(model_poisson_1_anova, caption = 'Likelihood Ratio Tests for Model 1',label = "tab:modeloneanova")
+
+# # Output the ANOVA table
+print(model_poisson_1_anova_table,
+      type = "latex",
+      include.rownames = TRUE,
+      sanitize.text.function = identity,
+      comment = FALSE)
+```
+
+Table \@ref(tab:modeloneanova) shows the results of Likelihood Ratio Tests on both variables Temperature and Holiday. We find that both variables are strongly statistically significant in modeling $log(\mu)$ of the Rented Bike Count. The tables in the appendix compares this model with all other models in this report.
+
+## Model Comparison (10 points)
+
+We now expand our initial Poisson regression model to better capture the factors influencing bike rental counts. First, we incorporate additional variables to avoid potential omitted variable bias. In particular, we included Rainfall Range and Seasons for this second model, and obtained 
+
+\begin{align}
+\log(\mu) &= 5.536 + 0.04477 \text{ Temperature} - 0.1881 \text{ Holiday} - 1.528 \text{ Light Rain} - 2.189 \text{ Heavy Rain} \notag \\
+          &\quad + 0.5293 \text{ Spring} + 0.2596 \text{ Summer} + 0.6717 \text{ Autumn}
+\label{eq:poisson_model_2}
+\end{align}
+
+```{r model_poisson_2, echo = FALSE, warning = FALSE, message = FALSE,results= "asis"}
+# adding hour of day and seasonality as bike rentals is expected to depend on the time of day and season
+model_poisson_2 <- glm(`Rented Bike Count` ~ 
+                         `Temperature(°C)` + `Holiday` + `Rainfall Range` + Seasons,
+                       data = data, 
+                       family = poisson(link = 'log'))
+# summary(model_poisson_2)
+# exp(coef(model_poisson_2))
+```
+Next, in our third model, we added a quadratic term for Temperature, as we suspect that there might be a dip when Temperature crosses a certain threshold. We also added in a linear and quadratic term for Hour, for similar reasons. We added interaction terms between Seasons and Holiday as activities that people do during certain seasons and holidays are often interrelated, and interaction terms between Temperature and Rainfall Range, and Temperature and Seasons, as these weather variables are interrelated. We thus obtained
+\begin{align}
+\log(\mu) &= 4.653 + 0.03053 \text{ Temperature} - 0.001089 \text{ Temperature}^{2} - 0.4705 \text{ Holiday} \notag \\
+          &\quad - 0.7990 \text{ Light Rain} - 4.386 \text{ Heavy Rain} + 0.1025 \text{ Spring} + 1.159 \text{ Summer} + 0.6688 \text{ Autumn} \notag \\
+          &\quad + 0.1046 \text{ Hour} - 0.002113 \text{ Hour}^{2} + 0.4337 \text{ Holiday} \times \text{ Spring} \notag \\
+          &\quad + 0.4314 \text{ Holiday} \times \text{ Summer} + 0.3077 \text{ Holiday} \times \text{ Autumn} \notag \\
+          &\quad + 0.06781 \text{ Temperature} \times \text{ Light Rain} + 0.1683 \text{ Temperature} \times \text{ Heavy Rain} \notag \\
+          &\quad + 0.05835 \text{ Temperature} \times \text{ Spring} + 0.01126 \text{ Temperature} \times \text{ Summer} \notag \\
+          &\quad + 0.03307 \text{ Temperature} \times \text{ Autumn} \notag \\
+          &\quad - 2.259 \text{ Light Rain} \times \text{ Spring} - 1.518 \text{ Heavy Rain} \times \text{ Spring} \notag \\
+          &\quad - 2.197 \text{ Light Rain} \times \text{ Summer} - 1.656 \text{ Heavy Rain} \times \text{ Summer} \notag \\
+          &\quad - 2.067 \text{ Light Rain} \times \text{ Autumn} - 1.383 \text{ Heavy Rain} \times \text{ Autumn}
+\label{eq:poisson_model_3}
+\end{align}
+
+```{r model_poisson_3, echo = FALSE}
+# Adding squared terms and interaction terms for model_poisson_3
+model_poisson_3 <- glm(`Rented Bike Count` ~ 
+                         `Temperature(°C)` + 
+                         I(`Temperature(°C)`^2) + 
+                         `Holiday` + 
+                         `Rainfall Range` +
+                         Seasons + 
+                         Seasons:Holiday + 
+                         `Hour`+
+                         I(`Hour`^2) +
+                         `Temperature(°C)`:`Rainfall Range` + 
+                         `Temperature(°C)`:Seasons + 
+                         `Rainfall Range`:Seasons, 
+                       data = data, 
+                       family = poisson(link = 'log'))
+# summary(model_poisson_3)
+# exp(coef(model_poisson_3))
+```
+
+We now conduct Likelihood Ratio Tests to check which is our best model thus far. The results in Table \@ref(tab:modelcompare) show that each successive model provided a statistically significantly better fit. Models 2 and 3s' are also featured in the Appendix. Overall, we conclude that all variables included in the model are important predictors of bike rental counts.
+
+```{r anova LR test, echo = FALSE, warning = FALSE, message = FALSE, results = 'asis'}
+# Comparing fit across models using anova
+model_compare <- anova(model_poisson_1,
+      model_poisson_2,
+      model_poisson_3,
+      test = 'Chisq')
+
+model_compare_table <- xtable(model_compare, caption = 'Likelihood Ratio Tests for Poisson Regression Models 1 -3',label = "tab:modelcompare")
+
+# # Output the ANOVA table
+print(model_compare_table,
+      type = "latex",
+      include.rownames = TRUE,
+      sanitize.text.function = identity,
+      comment = FALSE)
+```
+We now also look at the Information Criteria for all three models in Tables \@ref(tab:aic) and \@ref(tab:bic). We note that Model 3 has the lowest AICc and BIC, confirming that the inclusion of the quadratic and interaction terms significantly improved the model’s descriptive power for bike rental demand.
+
+```{r, echo = FALSE, results = 'asis'}
+# Compute AIC values for all models
+aic_values <- AICc(model_poisson_1, model_poisson_2, model_poisson_3)
+
+# Convert the AIC results to a data frame for xtable
+aic_df <- as.data.frame(aic_values)
+
+# Generate an xtable for AIC values with a caption and label
+aic_table <- xtable(aic_df, caption = "AICc Comparison of Poisson Models", label = "tab:aic")
+
+# Compute BIC values for all models
+bic_values <- BIC(model_poisson_1, model_poisson_2, model_poisson_3)
+
+# Convert the BIC results to a data frame for xtable
+bic_df <- as.data.frame(bic_values)
+
+# Generate an xtable for BIC values with a caption and label
+bic_table <- xtable(bic_df, caption = "BIC Comparison of Poisson Models", label = "tab:bic")
+```
+
+```{r, echo = FALSE, results = 'asis'}
+print(aic_table, type = "latex", include.rownames = TRUE, comment = FALSE)
+print(bic_table, type = "latex", include.rownames = TRUE, comment = FALSE)
+```
+
+## Model Assessment (10 points)
+
+We first look at the residuals for our best model so far, Model 3, in the plots below to assess the model's fit. \newpage
+
+```{r residuals, message=FALSE, warning=FALSE, echo = FALSE, fig.align='center', fig.height=7, fig.width=10, out.width="100%",fig.cap="Studying standardized Pearson residuals to assess Model 3"}
+
+pred <- predict(model_poisson_3 , type = "response")
+s.res <- rstandard(model_poisson_3 , type = "pearson")
+lin.pred <- model_poisson_3$linear.predictors
+
+df1 <- data.frame(data, pred , s.res , lin.pred, check.names = FALSE)
+
+#Standardized Pearson residual vs. Temperature plot
+residual_temp_plot <- df1 %>%
+  ggplot(aes(x = `Temperature(°C)`, y = s.res)) +
+  geom_point() +
+  geom_hline(yintercept = c(0), color = "red", linetype = "dashed") +
+  geom_smooth(se = FALSE) +
+  xlab("Temperature (°C)") +
+  ylab("Standardized Pearson residuals")
+
+#Standardized Pearson residual vs. Hour plot
+residual_hour_plot <- df1 %>%
+  ggplot(aes(x = `Hour`, y = s.res)) +
+  geom_point() +
+  geom_hline(yintercept = c(0), color = "red", linetype = "dashed") +
+  geom_smooth(se = FALSE) +
+  xlab("Hour") +
+  ylab("Standardized Pearson residuals")
+
+#Standardized Pearson residual vs. fitted values
+residual_fitted_plot <- df1 %>%
+  ggplot(aes(x = pred, y = s.res)) +
+  geom_point() +
+  geom_hline(yintercept = c(0), color = "red", linetype = "dashed") +
+  geom_smooth(se = FALSE) +
+  xlab("Fitted values") +
+  ylab("Standardized Pearson residuals")
+
+#Standardized Pearson residual vs. linear predictor
+residual_linpred_plot <- df1 %>%
+  ggplot(aes(x = lin.pred, y = s.res)) +
+  geom_point() +
+  geom_hline(yintercept = c(0), color = "red", linetype = "dashed") +
+  geom_smooth(se = FALSE) +
+  xlab("Linear predictor") +
+  ylab("Standardized Pearson residuals")
+
+# Combine the six plots in a 3x2 grid
+final_plot <- (residual_temp_plot | residual_hour_plot ) /
+              (residual_linpred_plot | residual_fitted_plot)
+
+# Print the combined plot
+final_plot
+```
+The Pearson residual plots suggest the presence of outliers or influential points in the data that are poorly predicted by the data.
+
+Standardized Residuals vs. Temperature (°C): The residuals seem mostly centered around zero, but there is a slight deviation from the center line at the highest temperatures, where we see the residuals taper down. The spread of residuals doesn't indicate severe model fit issues, but the slight curvature might suggest that further refinements (such as adding cubic terms or exploring other non-linear transformations) could improve the fit.
+
+Standardized Residuals vs. Hour: The residuals show a wavy pattern, which might suggest different cyclical peaks and troughs in the day that the quadratic term does not sufficient model, and perhaps further transforamtions could be considered.
+
+Standardized Residuals vs. Linear Predictor: The residuals start out tightly centered around zero, but as the value of the linear predictor increases, the residuals spread out and there is a clear funnel shape. This indicates heteroscedasticity in the data, and that the higher the values of the linear predictor, the worse the model's performance. This might also indicate overdispersion.
+
+Standardized Residuals vs. Fitted Values: The curves in the plot show that there might be some non-linearity that the model hasn't fully captured. Although the curvature is not extreme, the model could be potentially be improved. The residuals are also pretty spread out, which might indicate overdispersion.
+
+We now test for overdispersion directly, and find that the test returns a p-value of \< 2.2e-16. This indicates sufficient statistical evidence to reject the null hypothesis that the model has no overdispersion. 
+
+```{r dispersion testing, echo =FALSE}
+# Dispersion test for poisson model 3
+# dispersiontest(model_poisson_3)
+```
+
+Finally, we test for goodness of fit using the Pearson and residual deviance statistics, with the null hypothesis that the model is correct, and the alternative hypothesis that hte model is not correct. We find a p-value of \< 2.2e-16 for both statistics, and thus have sufficient statistical evidence to reject the null hypothesis that our model is correct.
+
+```{r goodness of fit, echo = FALSE}
+# Calculate Pearson statistic residuals
+pearson_stat <- sum(residuals(model_poisson_3, type = "pearson")^2)
+# pearson_stat
+
+# Get p value associated with the pearson statistic
+pearson_p_value <- pchisq(pearson_stat, model_poisson_3$df.residual,
+                          lower.tail= FALSE)
+# pearson_p_value 
+
+#Calculate deviance p value
+deviance_p_value <- pchisq(model_poisson_3$deviance,
+                           model_poisson_3$df.residual,
+                           lower.tail=FALSE)
+# deviance_p_value
+```
+
+Due to overdispersion and to poor goodness of fit, we now fit a Negative Binomial model. This model will better handle the overdispersion by allowing the variance to exceed the mean. To mitigate some of the peaks in Rented Bike Count due to the Hour, we also grouped Hour into categories "Morning", "Afternoon", "Evening", "Night."
+
+We obtain
+\begin{align}
+\log(\mu) &= 5.2988 + 0.03804 \text{ Temperature} - 0.0006668 \text{ Temperature}^{2} - 0.4931 \text{ Holiday} \notag \\
+          &\quad - 0.8558 \text{ Light Rain} - 3.907 \text{ Heavy Rain} + 0.1060 \text{ Spring} + 1.063 \text{ Summer} + 0.6958 \text{ Autumn} \notag \\
+          &\quad + 0.1602 \text{ Morning} + 0.2785 \text{ Afternoon} + 0.7226 \text{ Evening} \notag \\
+          &\quad + 0.3308 \text{ Holiday} \times \text{ Spring} + 0.5035 \text{ Holiday} \times \text{ Summer} + 0.2983 \text{ Holiday} \times \text{ Autumn} \notag \\
+          &\quad + 0.008618 \text{ Temperature} \times \text{ Light Rain} + 0.07181 \text{ Temperature} \times \text{ Heavy Rain} \notag \\
+          &\quad + 0.04289 \text{ Temperature} \times \text{ Spring} - 0.005424 \text{ Temperature} \times \text{ Summer} \notag \\
+          &\quad + 0.01517 \text{ Temperature} \times \text{ Autumn} \notag \\
+          &\quad - 1.200 \text{ Light Rain} \times \text{ Spring} - 0.08802 \text{ Heavy Rain} \times \text{ Spring} \notag \\
+          &\quad - 0.7371 \text{ Light Rain} \times \text{ Summer} + 0.08001 \text{ Heavy Rain} \times \text{ Summer} \notag \\
+          &\quad - 0.8874 \text{ Light Rain} \times \text{ Autumn} + 0.1400 \text{ Heavy Rain} \times \text{ Autumn}
+\end{align}
+
+
+Most terms were statistically significant; details are in the Appendix.
+```{r negative_binomial_model, echo = FALSE}
+model_negbin <- glm.nb(`Rented Bike Count` ~ 
+                         `Temperature(°C)` + 
+                         I(`Temperature(°C)`^2) + 
+                         `Holiday` + 
+                         `Rainfall Range` +
+                         Seasons + 
+                         Seasons:Holiday + 
+                         `Hour_Cat`+
+                         `Temperature(°C)`:`Rainfall Range` + 
+                         `Temperature(°C)`:Seasons + 
+                         `Rainfall Range`:Seasons, 
+                       data = data)
+
+# summary(model_negbin)
+```
+
+Notably, running the tests for goodness of fit, this model seems to fit better using the Pearson test, although it still fails the residual deviance test.
+
+```{r dispersion testing 2, echo =FALSE}
+# Dispersion test for negative binomial model
+theta_negbin <- model_negbin$theta  # Extract theta
+dispersion_negbin <- 1 / theta_negbin
+# dispersion_negbin # We note that there is overdispersion in the original Poisson model indeed
+```
+
+```{r goodness of fit 2, echo = FALSE}
+# Calculate Pearson statistic residuals
+pearson_stat <- sum(residuals(model_negbin, type = "pearson")^2)
+
+# Get p value associated with the pearson statistic
+pearson_p_value <- pchisq(pearson_stat, model_negbin$df.residual,
+                          lower.tail= FALSE)
+
+#Calculate deviance p value
+deviance_p_value <- pchisq(model_negbin$deviance,
+                           model_negbin$df.residual,
+                           lower.tail=FALSE)
+
+# Print the test results
+# cat("Pearson Chi-Square p-value:", pearson_p_value, "\n")
+# cat("Residual Deviance:", model_negbin$deviance, "\n")
+# cat("Residual DoF:", model_negbin$df.residual, "\n")
+# cat("Residual Deviance p-value:", deviance_p_value, "\n")
+```
+
+```{r, echo = FALSE, results = 'asis'}
+# Compute AICc and BIC values for negative binomial model
+# AICc(model_negbin)
+# BIC(model_negbin)
+```
+
+The negative binomial models also has a AICc of 120545.1 and BIC of 120735.1, which is substantially lower than our Model 3.
+
+Thus we conclude that the negative binomial model is a substantial improvement over the Poisson Model 3.
+
+## Alternative Specification
+
+Alternatively, we can also fit a linear regression model using the same explanatory variables as our final negative binomial model. We use ordinary least squares (OLS) regression, and obtain the following model:
+
+\begin{align*}
+\text{Rented Bike Count} &= 99.9721 + 5.0835 \text{ Temperature} + 0.1473 \text{ Temperature}^{2} - 78.6437 \text{ Holiday} \notag \\
+&\quad - 132.3200 \text{ Light Rain} - 132.1822 \text{ Heavy Rain} - 33.8971 \text{ Spring} \notag \\
+&\quad + 1003.6096 \text{ Summer} + 276.0702 \text{ Autumn} + 26.5335 \text{ Morning} \notag \\
+&\quad + 116.1885 \text{ Afternoon} + 641.6146 \text{ Evening} + 19.4403 \text{ Holiday} \times \text{ Spring} \notag \\
+&\quad + 30.2426 \text{ Holiday} \times \text{ Summer} - 83.4440 \text{ Holiday} \times \text{ Autumn} \notag \\
+&\quad - 26.9377 \text{ Temperature} \times \text{ Light Rain} - 33.7468 \text{ Temperature} \times \text{ Heavy Rain} \notag \\
+&\quad + 38.6185 \text{ Temperature} \times \text{ Spring} - 14.1319 \text{ Temperature} \times \text{ Summer} \notag \\
+&\quad + 25.0250 \text{ Temperature} \times \text{ Autumn} - 205.5726 \text{ Light Rain} \times \text{ Spring} \notag \\
+&\quad - 129.7537 \text{ Heavy Rain} \times \text{ Spring} - 63.5750 \text{ Light Rain} \times \text{ Summer} \notag \\
+&\quad - 152.6958 \text{ Heavy Rain} \times \text{ Summer} - 249.6427 \text{ Light Rain} \times \text{ Autumn} \notag \\
+&\quad - 336.4860 \text{ Heavy Rain} \times \text{ Autumn}
+\end{align*}
+
+```{r alternate model, results="asis", fig.pos='H', echo=FALSE, message=FALSE, warning=FALSE, echo = FALSE}
+
+# Create OLS regression model
+model_ols <- glm(`Rented Bike Count` ~ 
+                         `Temperature(°C)` + 
+                         I(`Temperature(°C)`^2) + 
+                         `Holiday` + 
+                         `Rainfall Range` +
+                         Seasons + 
+                         Seasons:Holiday + 
+                         `Hour_Cat`+
+                         `Temperature(°C)`:`Rainfall Range` + 
+                         `Temperature(°C)`:Seasons + 
+                         `Rainfall Range`:Seasons, 
+                       data = data,
+                        family = gaussian())
+
+#model_ols_summary
+
+```
+
+The statistical significance of each variable can be seen in the Appendix. Overall, of all the statistically signifiant variables, the variables Summer and Evening seem to have the largest positive impact on the number of bike rentals; we expect an increase in ~1000 rented bikes in the Summer over Winter, and an increase in ~640 bikes in the Evening over Night. Light Rain in the Autumn seems to have the largest additional negative impact on the number of bike rentals; we expect a decrease of an additional ~250 rented bikes when there is light rain in the autumn, compared to light rain in other seasons, or other seasons with no or heavy rain.
+
+**Models Comparison**
+
+Looking at the Information Criteria for all three models in Tables \@ref(tab:aicallmodel) and \@ref(tab:bicallmodel), we see that the OLS regression model has similar AICc and BIC scores to the Negative Binomial model, both of which are much lower than the 3rd Poisson model. This indicates that the OLS model has better exploratory power for bike rental demand than the 3rd Poisson model, and similar exploratory power to the Negative Binomial model.
+
+```{r anova LR test with ols, echo = FALSE, warning = FALSE, message = FALSE, fig.pos='H', results = 'asis'}
+# Compute AIC values for all models
+aic_values_2 <- AICc(model_poisson_3, model_negbin, model_ols)
+
+# Convert the AIC results to a data frame for xtable
+aic_df_2 <- as.data.frame(aic_values_2)
+
+# Generate an xtable for AIC values with a caption and label
+aic_table_2 <- xtable(aic_df_2, caption = "AICc Comparison of Poisson, Negative Binomial, and OLS Models", label = "tab:aicallmodel")
+
+# Compute BIC values for all models
+bic_values_2 <- BIC(model_poisson_3, model_negbin, model_ols)
+
+# Convert the BIC results to a data frame for xtable
+bic_df_2 <- as.data.frame(bic_values_2)
+
+# Generate an xtable for BIC values with a caption and label
+bic_table_2 <- xtable(bic_df_2, caption = "BIC Comparison of Poisson, Negative Binomial, and OLS Models", label = "tab:bicallmodel")
+
+print(aic_table_2, type = "latex", include.rownames = TRUE, comment = FALSE)
+print(bic_table_2, type = "latex", include.rownames = TRUE, comment = FALSE)
+```
+
+```{r fittedvalueplots, message=FALSE, warning=FALSE, echo = FALSE, fig.pos='H', results = 'asis', fig.height=8, fig.width=10, out.width="100%",fig.cap="Comparing Poisson, Negative Binomial, and OLS Models"}
+# Predicted values and residuals for OLS model
+ols_pred <- predict(model_ols, type = "response")
+ols_res <- residuals(model_ols)
+s_ols_res <- rstandard(model_ols, type = "pearson")
+ols_df_1 <- data.frame(data, ols_pred, ols_res, s_ols_res)
+
+# Predicted values and residuals for negative binomial model
+pred <- predict(model_negbin , type = "response")
+s.res <- rstandard(model_negbin , type = "pearson")
+lin.pred <- model_negbin$linear.predictors
+df2 <- data.frame(data, pred , s.res , lin.pred, check.names = FALSE)
+
+# Plot observed vs. fitted values for the Poisson Model
+pred_vs_obs_poisson_3 <- ggplot(df1, aes(x = `Rented Bike Count`, y = pred)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  geom_smooth(se = FALSE) +
+  ggtitle("Poisson Model 3\nPredictions vs. Observations") +
+  xlab("Observed Rented Bike Count") +
+  ylab("Predicted Mean Rented Bike Count")
+
+# Plot fitted values vs standardized residuals for the Poisson Model
+pred_vs_res_poisson_3 <- ggplot(df1, aes(x = pred, y = s.res)) +
+  geom_point() +
+  geom_hline(yintercept = c(0), color = "red", linetype = "dashed") +
+  geom_smooth(se = FALSE) +
+  ggtitle("Poisson Model 3\nResiduals vs. Fitted Values") +
+  xlab("Fitted Rented Bike Count") +
+  ylab("Standardized Pearson Residuals")
+
+# Plot observed vs. fitted values for the Negative Binomial Model
+pred_vs_obs_negbin_1 <- ggplot(df2, aes(x = `Rented Bike Count`, y = pred)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  geom_smooth(se = FALSE) +
+  ggtitle("Negative Binomial\nPredictions vs. Observations") +
+  xlab("Observed Rented Bike Count") +
+  ylab("Fitted Mean Rented Bike Count")
+
+# Plot fitted values vs standardized residuals for the Negative Binomial Model
+pred_vs_res_negbin_1 <- ggplot(df2, aes(x = pred, y = s.res)) +
+  geom_point() +
+  geom_hline(yintercept = c(0), color = "red", linetype = "dashed") +
+  geom_smooth(se = FALSE) +
+  ggtitle("Negative Binomial\nResiduals vs. Fitted Values") +
+  xlab("Fitted Mean Rented Bike Count") +
+  ylab("Standardized Pearson Residuals")
+
+# Plot observed vs. fitted values for the Linear Model
+pred_vs_obs_ols_1 <- ggplot(ols_df_1, aes(x = Rented.Bike.Count, y = ols_pred)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  geom_smooth(se = FALSE) +
+  ggtitle("OLS\nPredictions vs. Observations") +
+  xlab("Observed Rented Bike Count") +
+  ylab("Fitted Rented Bike Count")
+
+# Plot fitted values vs standardized residuals for the Linear Model
+pred_vs_res_ols_1 <- ggplot(ols_df_1, aes(x = ols_pred, y = s_ols_res)) +
+  geom_point() +
+  geom_hline(yintercept = c(0), color = "red", linetype = "dashed") +
+  geom_smooth(se = FALSE) +
+  ggtitle("OLS\nResiduals vs. Fitted Values") +
+  xlab("Fitted Rented Bike Count") +
+  ylab("Residuals")
+
+ 
+# Combine the six plots in a 3x2 grid
+final_ols_poisson_plot <- (pred_vs_obs_poisson_3 | pred_vs_res_poisson_3) /
+               (pred_vs_obs_negbin_1 | pred_vs_res_negbin_1) /
+               (pred_vs_obs_ols_1 | pred_vs_res_ols_1)
+
+# Print the combined plot
+final_ols_poisson_plot
+```
+
+When plotting predictions against observations for each model, as well as Pearson residuals against fitted values, we can see that the residuals for the Poisson model is the greatest, followed by the negative binomial model, and the OLS model. However the OLS model's residuals vs. fitted values seem to deviate more from the horizontal line compared to the negative binomial model. One more thing to note is that due to the nature of OLS regression, there is no bound on predicting negative rented bike counts as compared to the other models, and the model predicts negative rented bike counts.
+
+Overall, both the OLS and Negative Binomial models appear to perform better than Poisson Model 3, due to its overdispersion, with the OLS and negative binomial performing relatively on par from the Information Criterion values, with both having differents strengths and weaknesses as seen in the plots in the plots above.
+
+# Conclusion
+
+Our main hypotheses in this study were as follows:
+
+- $H_0$: External conditions, namely temperature, rainfall, season, time of day, and public holidays have no significant effect on the number of bike rentals per hour in Seoul.
+- $H_a$: External conditions, namely temperature, rainfall, season, time of day, and public holidays have a significant effect on the number of bike rentals per hour in Seoul.
+
+We estimated 3 different Poisson models, each successively with increasing complexity and performance, a negative binomial model to deal with the overdispersion causing issues with Poisson Model 3, and an OLS regression model based on the explanatory variables of the negative binomial model.
+
+Our findings were that increasing the complexity of the Poisson model by introducing rain amount, holidays, seasons, quadratic hour, and including interaction terms between seasons and holidays, temperature and rainfall, and temperature and seasons, and rain with seasons provided a better fit with statistical significance, enabling us to reject the null hypothesis.
+
+However, when testing for over/under dispersion for the best and most complex Poisson model, the results of the test were statistically significant in rejecting the null hypothesis that there was no under or over dispersion, indicating greater variance in the data. We then tried estimating a negative binomial model which ended up performing much better than the Poisson model as measured through AICc and BIC and residuals. Finally, an OLS regression model was estimated with the same explanatory variables and similar performance to the negative binomial model.
+
+The implications of this study are that negative binomial and OLS regression perform better at predicting the count of bike rentals per hour in Seoul, and that using conditions such as temperature, rainfall, season, and the holiday status of a day do have significant effects on the number of bike rentals per hour in Seoul. Thus, by refining models further, they can be utilized to potentially improve availability and accessibility of rental bikes by predicting the potential number of bike rentals in a given time period.
+
+Limitations are that there is a time series element to this dataset, which has resulted in wide residuals due to noise. Further time series methods could be employed to account for this, to provide a better fit.
+
+\newpage
+
+# Appendix
+
+```{r stargazer, results = 'asis', echo = FALSE, message = FALSE, warning = FALSE}
+# Load the required libraries for robust SE
+library(sandwich)
+library(lmtest)
+
+
+# Robust standard errors for Poisson models
+poisson_se_1 <- coeftest(model_poisson_1, vcov = vcovHC(model_poisson_1, type = "HC0"))
+poisson_se_2 <- coeftest(model_poisson_2, vcov = vcovHC(model_poisson_2, type = "HC0"))
+poisson_se_3 <- coeftest(model_poisson_3, vcov = vcovHC(model_poisson_3, type = "HC0"))
+
+# Robust standard errors for Negative Binomial model
+negbin_se <- coeftest(model_negbin, vcov = vcovHC(model_negbin, type = "HC0"))
+
+
+# For OLS model
+ols_se <- coeftest(model_ols, vcov = vcovHC(model_ols, type = "HC0"))
+# Stargazer table for Poisson models with robust SEs
+stargazer(
+  model_poisson_1, model_poisson_2, model_poisson_3,
+  type = 'latex',
+  header = FALSE,
+  se = list(poisson_se_1[, "Std. Error"], poisson_se_2[, "Std. Error"], poisson_se_3[, "Std. Error"]),
+  label = 'tab:poisson_models',
+  title = 'Poisson Model Comparison with Robust SEs',
+  column.sep.width = "2pt",  # Reduce space between columns
+  digits = 3,
+  no.space = TRUE,  # Compress the table
+  omit.stat = c("f", "ser", "adj.rsq"),  # Omit unnecessary statistics
+  font.size = "scriptsize",  # Reduce font size to fit more
+  notes = "P-values are based on Wald tests, not Likelihood Ratio tests"
+  
+)
+
+# Stargazer table for OLS and Negative Binomial models with robust SEs
+stargazer(
+  model_ols, model_negbin,
+  type = 'latex',
+  header = FALSE,
+  se = list(ols_se[, "Std. Error"], negbin_se[, "Std. Error"]),
+  label = 'tab:ols_negbin_models',
+  title = 'OLS and Negative Binomial Model Comparison with Robust SEs',
+  column.sep.width = "2pt",  # Reduce space between columns
+  digits = 3,
+  no.space = TRUE,  # Compress the table
+  omit.stat = c("f", "ser", "adj.rsq"),  # Omit unnecessary statistics
+  font.size = "scriptsize",  # Reduce font size to fit more
+  notes = "P-values are based on Wald tests, not Likelihood Ratio tests"
+)
+
+```
+
+
+```{r, echo = FALSE, results = 'asis'}
+# Poisson Model 1
+anova_poisson_1 <- Anova(model_poisson_1, test = "LR")
+anova_poisson_1_xtable <- xtable(anova_poisson_1, caption = "Likelihood Ratio Tests for Poisson Model 1", label = "tab:anova_poisson_1")
+print(anova_poisson_1_xtable, type = "latex", include.rownames = TRUE, comment = FALSE)
+
+# Poisson Model 2
+anova_poisson_2 <- Anova(model_poisson_2, test = "LR")
+anova_poisson_2_xtable <- xtable(anova_poisson_2, caption = "Likelihood Ratio Tests for Poisson Model 2", label = "tab:anova_poisson_2")
+print(anova_poisson_2_xtable, type = "latex", include.rownames = TRUE, comment = FALSE)
+
+# Poisson Model 3
+anova_poisson_3 <- Anova(model_poisson_3, test = "LR")
+anova_poisson_3_xtable <- xtable(anova_poisson_3, caption = "Likelihood Ratio Tests for Poisson Model 3", label = "tab:anova_poisson_3")
+print(anova_poisson_3_xtable, type = "latex", include.rownames = TRUE, comment = FALSE)
+
+# Negative Binomial Model
+anova_negbin <- Anova(model_negbin, test = "LR")
+anova_negbin_xtable <- xtable(anova_negbin, caption = "Likelihood Ratio Tests for Negative Binomial Model", label = "tab:anova_negbin")
+print(anova_negbin_xtable, type = "latex", include.rownames = TRUE, comment = FALSE)
+
+```
